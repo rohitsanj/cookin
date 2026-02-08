@@ -24,6 +24,7 @@ RUN npm ci --only=production
 
 # Copy only the compiled JS files from the 'build' stage to the new 'production' stage
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/static ./static
 ENV DATABASE_PATH=/data/cookin.db
 
 RUN mkdir -p /data
