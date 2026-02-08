@@ -16,6 +16,13 @@ function loadConfig() {
       baseUrl: process.env.LLM_BASE_URL || undefined,
     },
 
+    mealPlanLlm: {
+      provider: (process.env.MEAL_PLAN_LLM_PROVIDER || process.env.LLM_PROVIDER) as 'openai' | 'anthropic' | 'google' | 'openai-compatible',
+      apiKey: process.env.MEAL_PLAN_LLM_API_KEY || requireEnv('LLM_API_KEY'),
+      model: process.env.MEAL_PLAN_LLM_MODEL || requireEnv('LLM_MODEL'),
+      baseUrl: process.env.MEAL_PLAN_LLM_BASE_URL || process.env.LLM_BASE_URL || undefined,
+    },
+
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',

@@ -60,7 +60,7 @@ export function SchedulePage() {
   const [calendarScopes, setCalendarScopes] = useState<string[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [gsiLoaded, setGsiLoaded] = useState(false);
+  const [gsiLoaded, setGsiLoaded] = useState(!!window.google);
 
   useEffect(() => {
     Promise.all([
@@ -77,10 +77,17 @@ export function SchedulePage() {
   // Load Google Identity Services library
   useEffect(() => {
     if (calendarConnected) return;
+    if (window.google) {
+      setGsiLoaded(true);
+      return;
+    }
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.onload = () => setGsiLoaded(true);
+    script.onerror = () => {
+      if (window.google) setGsiLoaded(true);
+    };
     document.head.appendChild(script);
     return () => { document.head.removeChild(script); };
   }, [calendarConnected]);

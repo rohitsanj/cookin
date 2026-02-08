@@ -27,12 +27,9 @@ export class GoogleAdapter implements LlmAdapter {
       },
     };
 
-    // Only force JSON when no tools are provided
-    if (!options?.tools || options.tools.length === 0) {
-      (body.generationConfig as Record<string, unknown>).responseMimeType = 'application/json';
-    }
-
-    if (options?.tools && options.tools.length > 0) {
+    if (options?.webSearch) {
+      body.tools = [{ google_search: {} }];
+    } else if (options?.tools && options.tools.length > 0) {
       body.tools = [{
         functionDeclarations: options.tools.map(t => ({
           name: t.name,
@@ -40,6 +37,9 @@ export class GoogleAdapter implements LlmAdapter {
           parameters: t.parameters,
         })),
       }];
+    } else {
+      // Only force JSON when no tools/search are provided
+      (body.generationConfig as Record<string, unknown>).responseMimeType = 'application/json';
     }
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;

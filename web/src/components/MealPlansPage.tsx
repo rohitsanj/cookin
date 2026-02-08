@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import type { MealPlan, PlannedMeal } from '../types';
 
@@ -256,7 +255,6 @@ export function MealPlansPage() {
   const [plan, setPlan] = useState<MealPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     api.mealPlans.current()
@@ -288,15 +286,9 @@ export function MealPlansPage() {
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
         <p className="text-3xl mb-3">🍽️</p>
         <h2 className="text-lg font-medium mb-2">No meal plan yet</h2>
-        <p className="text-muted text-sm mb-6 max-w-sm">
-          Use the chat to generate a personalized meal plan based on your preferences.
+        <p className="text-muted text-sm max-w-sm">
+          Use the chat widget (click the button in the bottom right) to generate a personalized meal plan based on your preferences.
         </p>
-        <button
-          onClick={() => navigate('/')}
-          className="bg-accent text-bg font-medium rounded-xl px-6 py-3 text-sm hover:opacity-90 transition-opacity cursor-pointer"
-        >
-          Go to Chat
-        </button>
       </div>
     );
   }

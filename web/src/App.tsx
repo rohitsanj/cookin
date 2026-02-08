@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './components/LoginPage';
 import { Layout } from './components/Layout';
-import { ChatPage } from './components/ChatPage';
 import { MealPlansPage } from './components/MealPlansPage';
 import { RecipesPage } from './components/RecipesPage';
 import { SchedulePage } from './components/SchedulePage';
@@ -26,8 +25,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<ChatPage />} />
-        <Route path="/meals" element={<MealPlansPage />} />
+        <Route path="/" element={<MealPlansPage />} />
         <Route path="/recipes" element={<RecipesPage />} />
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/preferences" element={<PreferencesPage />} />

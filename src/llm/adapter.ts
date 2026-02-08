@@ -5,6 +5,7 @@ import { GoogleAdapter } from './providers/google.js';
 import { config } from '../config.js';
 
 let instance: LlmAdapter;
+let mealPlanInstance: LlmAdapter;
 
 export function createLlmAdapter(llmConfig: LlmConfig): LlmAdapter {
   switch (llmConfig.provider) {
@@ -25,4 +26,11 @@ export function getLlm(): LlmAdapter {
     instance = createLlmAdapter(config.llm);
   }
   return instance;
+}
+
+export function getMealPlanLlm(): LlmAdapter {
+  if (!mealPlanInstance) {
+    mealPlanInstance = createLlmAdapter(config.mealPlanLlm);
+  }
+  return mealPlanInstance;
 }

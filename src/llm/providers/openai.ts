@@ -38,7 +38,9 @@ export class OpenAiAdapter implements LlmAdapter {
       temperature: 0.7,
     };
 
-    if (options?.tools && options.tools.length > 0) {
+    if (options?.webSearch) {
+      body.web_search_options = {};
+    } else if (options?.tools && options.tools.length > 0) {
       body.tools = options.tools.map(t => ({
         type: 'function',
         function: { name: t.name, description: t.description, parameters: t.parameters },

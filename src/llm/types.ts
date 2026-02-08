@@ -17,6 +17,7 @@ export interface ToolResult {
 
 export interface ChatOptions {
   tools?: ToolDefinition[];
+  webSearch?: boolean;
 }
 
 export interface ChatMessage {

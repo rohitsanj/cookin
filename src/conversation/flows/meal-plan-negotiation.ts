@@ -1,7 +1,7 @@
 import type { User } from '../../services/user.js';
 import { setConversationState } from '../../services/user.js';
 import { ConversationState } from '../state.js';
-import { getLlm } from '../../llm/adapter.js';
+import { getLlm, getMealPlanLlm } from '../../llm/adapter.js';
 import { buildSystemPrompt, buildMealPlanPrompt, buildGroceryListPrompt } from '../prompt-builder.js';
 import { parseResponse } from '../response-parser.js';
 import * as mealPlanService from '../../services/meal-plan.js';
@@ -17,10 +17,10 @@ interface MealData {
 
 export async function generateAndSendMealPlan(user: User): Promise<string> {
   const systemPrompt = buildMealPlanPrompt(user);
-  const response = await getLlm().chat([
+  const response = await getMealPlanLlm().chat([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: 'Generate my meal plan for this week.' },
-  ]);
+  ], { webSearch: true });
 
   const parsed = parseResponse(response.content);
   const meals = (parsed.data?.meals as MealData[]) || [];
@@ -156,13 +156,13 @@ export async function handleMealPlanNegotiation(user: User, text: string): Promi
         // Ask LLM for replacements
         const swapPrompt = buildMealPlanPrompt(user);
         try {
-          const swapResponse = await getLlm().chat([
+          const swapResponse = await getMealPlanLlm().chat([
             { role: 'system', content: swapPrompt },
             {
               role: 'user',
               content: `Generate replacement meals for ${swapDay}: ${typesToRegenerate.join(', ')}. ${reason ? `Preference: ${reason}.` : ''} Must be different from: ${existingNames.join(', ')}`,
             },
-          ]);
+          ], { webSearch: true });
           const swapParsed = parseResponse(swapResponse.content);
           const newMeals = (swapParsed.data?.meals as MealData[]) || [];
 

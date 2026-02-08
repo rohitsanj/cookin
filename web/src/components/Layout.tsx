@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ChatWidget, ChatWidgetFAB } from './ChatWidget';
 
 const tabs = [
-  { path: '/', label: 'Chat' },
-  { path: '/meals', label: 'Meal Plans' },
+  { path: '/', label: 'Meal Plans' },
   { path: '/recipes', label: 'Recipes' },
   { path: '/schedule', label: 'Schedule' },
   { path: '/preferences', label: 'Preferences' },
@@ -11,6 +12,7 @@ const tabs = [
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   return (
     <div className="h-screen flex flex-col">
@@ -65,6 +67,10 @@ export function Layout() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <Outlet />
       </main>
+
+      {/* Chat Widget */}
+      <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      {!isChatOpen && <ChatWidgetFAB onClick={() => setIsChatOpen(true)} />}
     </div>
   );
 }
