@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(brew --prefix:*)",
+      "Bash(brew install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial implementation of Cookin WhatsApp chatbot\n\nTypeScript + Express + SQLite MVP with:\n- Twilio WhatsApp integration \\(webhook + sender\\)\n- Vendor-agnostic LLM layer \\(OpenAI, Anthropic, Google, OpenAI-compatible\\)\n- Conversational onboarding \\(10-step profile setup\\)\n- Weekly meal plan generation + grocery lists via LLM\n- Inventory tracking with weekly confirmation checklist\n- Recipe book \\(save liked recipes with modifications\\)\n- Scheduled cook reminders + post-cook feedback\n- Configurable message frequency\n- Render deployment config \\(render.yaml + Dockerfile\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
