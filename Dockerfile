@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
-COPY dist/ ./dist/
+COPY . .
 COPY src/db/migrations/ ./dist/db/migrations/
 
 ENV NODE_ENV=production
