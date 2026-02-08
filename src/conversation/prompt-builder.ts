@@ -88,6 +88,7 @@ If they didn't cook or skipped: intent "cook_skipped"`;
       return `The user is sending a free-form message. You have tools available to take actions on their behalf.
 
 Use the appropriate tool when the user wants to:
+- Generate a new meal plan (use generate_meal_plan tool — limited to 3 per day)
 - View, rate, save, or modify recipes
 - View their current meal plan
 - Update their cooking preferences or schedule
@@ -170,7 +171,9 @@ Requirements:
 - Breakfasts should be quick (15-30 min)
 - Lunches should be moderate (20-40 min)
 - Dinners can be more involved (30-60 min)
-- Each meal should be achievable for a ${user.skill_level} cook`);
+- Each meal should be achievable for a ${user.skill_level} cook
+- Search the web for real, popular recipes — do NOT invent recipes
+- For each meal, include brief but complete cooking instructions in "recipe_steps" (sourced from web search results), not just dish names`);
 
   const recipes = getSavedRecipes(user.phone_number);
   if (recipes.length > 0) {

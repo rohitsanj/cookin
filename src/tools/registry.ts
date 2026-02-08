@@ -1,7 +1,8 @@
 import type { ToolDefinition } from '../llm/types.js';
 import * as recipe from '../services/recipe.js';
 import * as mealPlan from '../services/meal-plan.js';
-import { updateUser } from '../services/user.js';
+import { getUser, updateUser } from '../services/user.js';
+import { generateAndSendMealPlan } from '../conversation/flows/meal-plan-negotiation.js';
 
 export type ToolHandler = (args: Record<string, unknown>) => Promise<string>;
 
@@ -265,6 +266,28 @@ function buildToolRegistry(userPhone: string): RegisteredTool[] {
           recipe.incrementTimesCooked(r.id);
         }
         return JSON.stringify({ success: true, logged: args.recipe_name });
+      },
+    },
+    {
+      definition: {
+        name: 'generate_meal_plan',
+        description: 'Generate a new weekly meal plan based on the user\'s preferences. Limited to 3 per day. Use this when the user asks for a new meal plan, fresh plan, or wants to replan their week.',
+        parameters: { type: 'object', properties: {}, required: [] },
+      },
+      handler: async () => {
+        const todayCount = mealPlan.countTodaysMealPlans(userPhone);
+        if (todayCount >= 3) {
+          return JSON.stringify({ success: false, error: 'Daily limit reached (3 meal plans per day). Try again tomorrow.' });
+        }
+        const user = getUser(userPhone);
+        if (!user) {
+          return JSON.stringify({ success: false, error: 'User not found' });
+        }
+        if (user.cook_days.length === 0) {
+          return JSON.stringify({ success: false, error: 'No cook days set. Ask the user to set their cook days first.' });
+        }
+        const reply = await generateAndSendMealPlan(user);
+        return JSON.stringify({ success: true, reply });
       },
     },
   ];

@@ -78,6 +78,13 @@ function deserializeMeal(row: PlannedMealRow): PlannedMeal {
   };
 }
 
+export function countTodaysMealPlans(userPhone: string): number {
+  const row = getDb().prepare(
+    "SELECT COUNT(*) as count FROM meal_plan WHERE user_phone = ? AND created_at >= date('now')"
+  ).get(userPhone) as { count: number };
+  return row.count;
+}
+
 export function getCurrentPlan(userPhone: string): MealPlan | null {
   const row = getDb().prepare(
     "SELECT * FROM meal_plan WHERE user_phone = ? AND status IN ('draft', 'confirmed') ORDER BY week_start DESC LIMIT 1"

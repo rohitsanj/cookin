@@ -32,10 +32,12 @@ export function ChatWidget({ isOpen, onClose }: ChatWidgetProps) {
       .finally(() => setLoadingHistory(false));
   }, []);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom when messages change or chat opens
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (isOpen) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isOpen]);
 
   // Auto-focus input when opened
   useEffect(() => {
