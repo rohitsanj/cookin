@@ -4,7 +4,6 @@ import { ConversationState, isOnboardingState } from '../conversation/state.js';
 import { handleOnboarding } from '../conversation/flows/onboarding.js';
 import { handleMealPlanNegotiation } from '../conversation/flows/meal-plan-negotiation.js';
 import { handleCookFeedback } from '../conversation/flows/cook-reminder.js';
-import { handleGroceryConfirmation } from '../conversation/flows/grocery-confirmation.js';
 import { handleAdHoc } from '../conversation/flows/ad-hoc.js';
 
 /**
@@ -29,9 +28,6 @@ export async function handleWebChat(userIdentifier: string, text: string): Promi
           break;
         case ConversationState.AWAITING_COOK_FEEDBACK:
           responseText = await handleCookFeedback(user, text);
-          break;
-        case ConversationState.AWAITING_GROCERY_CONFIRM:
-          responseText = await handleGroceryConfirmation(user, text);
           break;
         case ConversationState.IDLE:
         default:
