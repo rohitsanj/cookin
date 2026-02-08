@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: cookin
+    runtime: node
+    buildCommand: npm install && npm run build && mkdir -p data && cp src/db/migrations/*.sql dist/db/migrations/
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: ./data/cookin.db
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: LLM_PROVIDER
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_BASE_URL
+        sync: false
+    disk:
+      name: cookin-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
