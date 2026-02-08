@@ -10,10 +10,10 @@ import { handleGroceryConfirmation } from './flows/grocery-confirmation.js';
 import { handleAdHoc } from './flows/ad-hoc.js';
 
 export async function handleInbound(from: string, text: string): Promise<void> {
-  logMessage(from, 'inbound', text);
-
+  // First get or create the user
   const user = getOrCreateUser(from);
-
+  // Then log the inbound message
+  logMessage(from, 'inbound', text);
   let responseText: string;
 
   try {

@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import 'dotenv/config'
+
 import express from 'express';
 import { config } from './config.js';
 import { getDb } from './db/connection.js';
