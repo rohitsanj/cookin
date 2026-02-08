@@ -19,11 +19,8 @@ export interface TwilioWebhookBody {
 export function extractMessage(body: TwilioWebhookBody): InboundMessage | null {
   if (!body.Body || !body.From) return null;
 
-  // Strip the "whatsapp:" prefix from the phone number
-  const from = body.From.replace('whatsapp:', '');
-
   return {
-    from,
+    from: body.From,
     text: body.Body,
     timestamp: new Date().toISOString(),
     messageId: body.MessageSid,

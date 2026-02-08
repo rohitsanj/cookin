@@ -4,7 +4,7 @@ import express from 'express';
 import { config } from './config.js';
 import { getDb } from './db/connection.js';
 import { runMigrations } from './db/migrate.js';
-import { webhookRouter } from './whatsapp/webhook.js';
+import { webhookRouter } from './sender/webhook.js';
 import { bootScheduler } from './scheduler/index.js';
 
 function main() {

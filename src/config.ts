@@ -12,7 +12,7 @@ function loadConfig() {
     twilio: {
       accountSid: requireEnv('TWILIO_ACCOUNT_SID'),
       authToken: requireEnv('TWILIO_AUTH_TOKEN'),
-      whatsappNumber: requireEnv('TWILIO_WHATSAPP_NUMBER'), // e.g. "whatsapp:+14155238886"
+      number: requireEnv('TWILIO_NUMBER'), // e.g. "+14155238886"
     },
 
     llm: {

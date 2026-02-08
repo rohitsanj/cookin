@@ -1,7 +1,7 @@
 import { getOrCreateUser, setConversationState } from '../services/user.js';
 import { getInventory } from '../services/inventory.js';
 import { getMealForDay, getCurrentPlan } from '../services/meal-plan.js';
-import { sendTextMessage } from '../whatsapp/sender.js';
+import { sendTextMessage } from '../sender/sender.js';
 import { ConversationState } from '../conversation/state.js';
 import { generateAndSendMealPlan } from '../conversation/flows/meal-plan-negotiation.js';
 

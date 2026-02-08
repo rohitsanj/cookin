@@ -1,6 +1,6 @@
 import { getOrCreateUser } from '../services/user.js';
 import { logMessage } from '../services/message-throttle.js';
-import { sendTextMessage } from '../whatsapp/sender.js';
+import { sendTextMessage } from '../sender/sender.js';
 import { ConversationState, isOnboardingState } from './state.js';
 import { handleOnboarding } from './flows/onboarding.js';
 import { handleInventoryConfirmation } from './flows/inventory-confirmation.js';

@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { canSendMessage, logMessage } from '../services/message-throttle.js';
 
-const MAX_MESSAGE_LENGTH = 1600; // Twilio WhatsApp limit per segment
+const MAX_MESSAGE_LENGTH = 1600; // Twilio Ph Number limit per segment
 
 function getBaseUrl(): string {
   return `https://api.twilio.com/2010-04-01/Accounts/${config.twilio.accountSid}/Messages.json`;
@@ -14,8 +14,8 @@ function getAuthHeader(): string {
 
 async function sendRaw(to: string, body: string): Promise<boolean> {
   const params = new URLSearchParams({
-    From: config.twilio.whatsappNumber,
-    To: `whatsapp:${to}`,
+    From: config.twilio.number,
+    To: to,
     Body: body,
   });
 
