@@ -1,5 +1,4 @@
 import type { ToolDefinition } from '../llm/types.js';
-import * as inventory from '../services/inventory.js';
 import * as recipe from '../services/recipe.js';
 import * as mealPlan from '../services/meal-plan.js';
 import { updateUser } from '../services/user.js';
@@ -23,65 +22,6 @@ export function getToolsForUser(userPhone: string): {
 
 function buildToolRegistry(userPhone: string): RegisteredTool[] {
   return [
-    {
-      definition: {
-        name: 'get_inventory',
-        description: 'Get the user\'s current kitchen inventory list',
-        parameters: { type: 'object', properties: {}, required: [] },
-      },
-      handler: async () => {
-        const items = inventory.getInventory(userPhone);
-        if (items.length === 0) return JSON.stringify({ items: [], message: 'Inventory is empty' });
-        return JSON.stringify({ items: items.map(i => ({ name: i.item_name, category: i.category, quantity: i.quantity, is_staple: i.is_staple })) });
-      },
-    },
-    {
-      definition: {
-        name: 'add_inventory_items',
-        description: 'Add one or more items to the user\'s kitchen inventory',
-        parameters: {
-          type: 'object',
-          properties: {
-            items: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  item_name: { type: 'string', description: 'Name of the item' },
-                  category: { type: 'string', description: 'Category: pantry, protein, produce, dairy, spices, other' },
-                  quantity: { type: 'string', description: 'Amount, e.g. "500g", "2 lbs", "1 dozen"' },
-                  is_staple: { type: 'boolean', description: 'Whether this is a pantry staple' },
-                },
-                required: ['item_name'],
-              },
-            },
-          },
-          required: ['items'],
-        },
-      },
-      handler: async (args) => {
-        const items = args.items as Array<{ item_name: string; category?: string; quantity?: string; is_staple?: boolean }>;
-        inventory.addItems(userPhone, items);
-        return JSON.stringify({ success: true, added: items.length });
-      },
-    },
-    {
-      definition: {
-        name: 'remove_inventory_item',
-        description: 'Remove an item from the user\'s kitchen inventory',
-        parameters: {
-          type: 'object',
-          properties: {
-            item_name: { type: 'string', description: 'Name of the item to remove' },
-          },
-          required: ['item_name'],
-        },
-      },
-      handler: async (args) => {
-        inventory.removeItem(userPhone, args.item_name as string);
-        return JSON.stringify({ success: true, removed: args.item_name });
-      },
-    },
     {
       definition: {
         name: 'get_saved_recipes',
@@ -310,27 +250,21 @@ function buildToolRegistry(userPhone: string): RegisteredTool[] {
     {
       definition: {
         name: 'log_meal',
-        description: 'Log that the user cooked a meal (not from the plan), optionally deducting ingredients from inventory',
+        description: 'Log that the user cooked a meal (not from the plan)',
         parameters: {
           type: 'object',
           properties: {
             recipe_name: { type: 'string' },
-            ingredients_used: { type: 'array', items: { type: 'string' }, description: 'Ingredient names used' },
           },
           required: ['recipe_name'],
         },
       },
       handler: async (args) => {
-        const ingredientsUsed = (args.ingredients_used as string[] | undefined) || [];
-        for (const name of ingredientsUsed) {
-          inventory.removeItem(userPhone, name);
-        }
-        // Check if this is a saved recipe, increment times_cooked
         const r = recipe.findRecipeByName(userPhone, args.recipe_name as string);
         if (r) {
           recipe.incrementTimesCooked(r.id);
         }
-        return JSON.stringify({ success: true, logged: args.recipe_name, deducted_ingredients: ingredientsUsed.length });
+        return JSON.stringify({ success: true, logged: args.recipe_name });
       },
     },
   ];

@@ -14,15 +14,6 @@ export const DB_SCHEMA_CONTEXT = `## Database Schema
 - timezone TEXT
 - max_messages_per_day INTEGER
 
-### inventory_item
-- id INTEGER (PK, auto-increment)
-- user_phone TEXT (FK -> user)
-- item_name TEXT
-- category TEXT (e.g. pantry, protein, produce, dairy, spices)
-- quantity TEXT
-- is_staple INTEGER (0 or 1)
-- UNIQUE(user_phone, item_name)
-
 ### saved_recipe
 - id TEXT (PK, UUID)
 - user_phone TEXT (FK -> user)

@@ -1,6 +1,5 @@
 import type { User } from '../../services/user.js';
 import { updateUser, setConversationState, getOrCreateUser } from '../../services/user.js';
-import { addItems } from '../../services/inventory.js';
 import { ConversationState } from '../state.js';
 import { getLlm } from '../../llm/adapter.js';
 import { buildSystemPrompt } from '../prompt-builder.js';
@@ -23,7 +22,7 @@ export async function handleOnboarding(user: User, text: string): Promise<string
       setConversationState(user.phone_number, ConversationState.ONBOARDING_CUISINE);
       return `Hey there! Welcome to Cookin' 🍳
 
-I'll help you build a cooking habit by planning meals and grocery lists.
+I'll help you build a cooking habit with personalized meal plans.
 
 Let's set you up! What cuisines do you enjoy? (e.g., Indian, Italian, Mexican, Japanese — list as many as you like)`;
     }
@@ -78,35 +77,10 @@ Which days of the week do you want to cook? (e.g., Mon, Wed, Fri, Sun)`;
       const data = await llmParse(user, ConversationState.ONBOARDING_COOK_DAYS, text);
       const days = (data.cook_days as string[]) || [];
       updateUser(user.phone_number, { cook_days: days });
-      setConversationState(user.phone_number, ConversationState.ONBOARDING_GROCERY_DAY);
-      return `You'll cook on ${days.join(', ')}. Nice!
-
-Which day do you want your grocery list? (Usually a day or two before your first cook day)`;
-    }
-
-    case ConversationState.ONBOARDING_GROCERY_DAY: {
-      const data = await llmParse(user, ConversationState.ONBOARDING_GROCERY_DAY, text);
-      const day = (data.grocery_day as string) || 'Saturday';
-      updateUser(user.phone_number, { grocery_day: day });
-      setConversationState(user.phone_number, ConversationState.ONBOARDING_INVENTORY);
-      return `Grocery list coming every ${day}.
-
-Do you have any staples at home right now? (e.g., rice, pasta, olive oil, salt, basic spices — list whatever you have, or say "nothing")`;
-    }
-
-    case ConversationState.ONBOARDING_INVENTORY: {
-      const data = await llmParse(user, ConversationState.ONBOARDING_INVENTORY, text);
-      const items = (data.items as Array<{ item_name: string; category?: string }>) || [];
-      if (items.length > 0) {
-        addItems(user.phone_number, items.map(i => ({ ...i, is_staple: true })));
-      }
       setConversationState(user.phone_number, ConversationState.ONBOARDING_CONFIRM);
 
       const updated = getOrCreateUser(user.phone_number);
-      const itemNote = items.length > 0
-        ? `Got it — ${items.length} staples logged.`
-        : `Starting from scratch — no problem!`;
-      return `${itemNote}
+      return `You'll cook on ${days.join(', ')}. Nice!
 
 Here's your profile:
 
@@ -115,7 +89,6 @@ Restrictions: ${updated.dietary_restrictions.join(', ') || 'None'}
 Household: ${updated.household_size}
 Skill: ${updated.skill_level}
 Cook days: ${updated.cook_days.join(', ')}
-Grocery day: ${updated.grocery_day}
 
 Does everything look right? (say "yes" to confirm, or tell me what to change)`;
     }
@@ -127,7 +100,6 @@ Does everything look right? (say "yes" to confirm, or tell me what to change)`;
       );
 
       if (isConfirm) {
-        // Generate meal plan immediately
         const updated = getOrCreateUser(user.phone_number);
         try {
           const planReply = await generateAndSendMealPlan(updated);
@@ -138,7 +110,6 @@ Does everything look right? (say "yes" to confirm, or tell me what to change)`;
           return `You're all set! I had trouble generating a meal plan right now, but you can ask me anytime to create one.
 
 You can also:
-- Update what's in your kitchen
 - Change your preferences
 - Ask for recipe ideas`;
         }
@@ -147,8 +118,13 @@ You can also:
         const field = data.field as string | undefined;
         const value = data.value;
 
-        if (field && value !== undefined) {
-          updateUser(user.phone_number, { [field]: value } as Record<string, unknown>);
+        const validFields = new Set([
+          'name', 'cuisine_preferences', 'dietary_restrictions', 'household_size',
+          'skill_level', 'cook_days', 'cook_reminder_time', 'timezone',
+        ]);
+
+        if (field && value !== undefined && validFields.has(field)) {
+          updateUser(user.phone_number, { [field]: value } as Parameters<typeof updateUser>[1]);
           const updated = getOrCreateUser(user.phone_number);
           return `Updated! Here's your revised profile:
 
@@ -157,7 +133,6 @@ Restrictions: ${updated.dietary_restrictions.join(', ') || 'None'}
 Household: ${updated.household_size}
 Skill: ${updated.skill_level}
 Cook days: ${updated.cook_days.join(', ')}
-Grocery day: ${updated.grocery_day}
 
 Does everything look right now?`;
         }

@@ -1,6 +1,5 @@
 import type { User } from '../../services/user.js';
 import { setConversationState } from '../../services/user.js';
-import { getInventory } from '../../services/inventory.js';
 import { ConversationState } from '../state.js';
 import { getLlm } from '../../llm/adapter.js';
 import { buildSystemPrompt, buildMealPlanPrompt, buildGroceryListPrompt } from '../prompt-builder.js';
@@ -226,7 +225,6 @@ export async function handleMealPlanNegotiation(user: User, text: string): Promi
 }
 
 async function generateGroceryList(user: User, plan: mealPlanService.MealPlan): Promise<string> {
-  const inventory = getInventory(user.phone_number);
   const meals = plan.meals
     .filter(m => m.status === 'pending')
     .map(m => ({
@@ -234,11 +232,7 @@ async function generateGroceryList(user: User, plan: mealPlanService.MealPlan): 
       ingredients: m.ingredients,
     }));
 
-  const prompt = buildGroceryListPrompt(
-    user,
-    meals,
-    inventory.map(i => ({ item_name: i.item_name, quantity: i.quantity })),
-  );
+  const prompt = buildGroceryListPrompt(user, meals);
 
   const response = await getLlm().chat([
     { role: 'system', content: prompt },

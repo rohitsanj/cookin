@@ -21,7 +21,7 @@ export interface PlannedMeal {
   meal_type: 'breakfast' | 'lunch' | 'dinner';
   recipe_name: string;
   recipe_steps: string | null;
-  ingredients: Array<{ name: string; qty: string; unit: string; in_inventory?: boolean }>;
+  ingredients: Array<{ name: string; qty: string; unit: string }>;
   cook_time_min: number | null;
   status: 'pending' | 'cooked' | 'skipped';
   user_rating: number | null;

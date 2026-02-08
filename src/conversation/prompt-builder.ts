@@ -1,11 +1,10 @@
 import type { User } from '../services/user.js';
-import { getInventory } from '../services/inventory.js';
 import { getSavedRecipes } from '../services/recipe.js';
 import { getCurrentPlan } from '../services/meal-plan.js';
 import { ConversationState } from './state.js';
 import { DB_SCHEMA_CONTEXT } from '../tools/schema-context.js';
 
-const PERSONA = `You are Cookin, a friendly and practical cooking assistant on WhatsApp. You help the user build a consistent cooking habit through meal planning, grocery lists, and cooking reminders.
+const PERSONA = `You are Cookin, a friendly and practical cooking assistant. You help the user build a consistent cooking habit through meal planning and personalized recipes.
 
 Your personality:
 - Warm but concise (WhatsApp messages should be short — no walls of text)
@@ -52,39 +51,11 @@ Parse into an array of full day names (Monday, Tuesday, etc.).
 Intent: "onboarding_response"
 Data: { "cook_days": ["Monday", "Wednesday", "Friday"] }`;
 
-    case ConversationState.ONBOARDING_GROCERY_DAY:
-      return `The user is answering: "Which day do you want your grocery list?"
-Parse into a single day name.
-Intent: "onboarding_response"
-Data: { "grocery_day": "Saturday" }`;
-
-    case ConversationState.ONBOARDING_INVENTORY:
-      return `The user is listing staples they have at home.
-Parse into a list of items with optional category. Mark all as staples.
-Intent: "onboarding_response"
-Data: { "items": [{ "item_name": "rice", "category": "pantry" }, { "item_name": "olive oil", "category": "pantry" }, ...] }`;
-
     case ConversationState.ONBOARDING_CONFIRM:
       return `The user was just shown their profile summary and asked to confirm.
 Determine if they're confirming (yes/looks good/correct) or want to change something.
 If confirming: intent "confirm_profile", reply with a welcome message.
 If changing: intent "correct_profile", data = { "field": "<which field>", "value": "<new value>" }, and your reply should acknowledge the change and re-confirm.`;
-
-    case ConversationState.AWAITING_INVENTORY_CONFIRM: {
-      const checklist = stateContext.inventory_checklist as number[] | undefined;
-      return `The user was sent a numbered inventory checklist and asked to reply with numbers of items they still have.
-The checklist item IDs are: ${JSON.stringify(checklist || [])}
-Parse their response. They might say:
-- A list of numbers: "1,2,3,5" or "1 2 3 5"
-- "all" — they have everything
-- "none" — they have nothing
-- Natural language: "I have everything except the spinach"
-
-Intent: "inventory_confirm"
-Data: { "keep_indices": [0, 1, 2, 4] } — zero-based indices of items to KEEP
-If "all": keep_indices should include all indices.
-If "none": keep_indices should be empty array.`;
-    }
 
     case ConversationState.AWAITING_MEAL_PLAN_APPROVAL: {
       const pendingPlan = stateContext.pending_plan as Record<string, unknown> | undefined;
@@ -113,22 +84,10 @@ Data: {
 If they didn't cook or skipped: intent "cook_skipped"`;
     }
 
-    case ConversationState.AWAITING_GROCERY_CONFIRM:
-      return `The user was asked if they got everything on the grocery list.
-Parse what they bought.
-
-Intent: "grocery_confirm"
-Data: {
-  "got_everything": true/false,
-  "bought_items": [{ "item_name": "chicken", "quantity": "500g" }, ...],
-  "missing_items": ["cream"]
-}`;
-
     case ConversationState.IDLE:
       return `The user is sending a free-form message. You have tools available to take actions on their behalf.
 
 Use the appropriate tool when the user wants to:
-- View or modify their kitchen inventory
 - View, rate, save, or modify recipes
 - View their current meal plan
 - Update their cooking preferences or schedule
@@ -157,23 +116,7 @@ Dietary restrictions: ${user.dietary_restrictions.join(', ') || 'None'}
 Household size: ${user.household_size}
 Skill level: ${user.skill_level}
 Cook days: ${user.cook_days.join(', ') || 'Not set'}
-Grocery day: ${user.grocery_day || 'Not set'} at ${user.grocery_time}
-Cook reminder time: ${user.cook_reminder_time}
 Timezone: ${user.timezone}`);
-  }
-
-  // Inventory context for relevant states
-  if ([ConversationState.IDLE, ConversationState.AWAITING_MEAL_PLAN_APPROVAL].includes(state)) {
-    const inventory = getInventory(user.phone_number);
-    if (inventory.length > 0) {
-      const inventoryText = inventory.map(item => {
-        let line = `- ${item.item_name}`;
-        if (item.quantity) line += ` (${item.quantity})`;
-        if (item.is_staple) line += ' [staple]';
-        return line;
-      }).join('\n');
-      parts.push(`## Current Kitchen Inventory\n${inventoryText}`);
-    }
   }
 
   // Current meal plan for relevant states
@@ -228,16 +171,6 @@ Requirements:
 - Lunches should be moderate (20-40 min)
 - Dinners can be more involved (30-60 min)
 - Each meal should be achievable for a ${user.skill_level} cook`);
-
-  const inventory = getInventory(user.phone_number);
-  if (inventory.length > 0) {
-    const inventoryText = inventory.map(item => {
-      let line = item.item_name;
-      if (item.quantity) line += ` (${item.quantity})`;
-      return line;
-    }).join(', ');
-    parts.push(`## Available Ingredients\n${inventoryText}\n\nTry to incorporate these ingredients where possible to minimize grocery shopping.`);
-  }
 
   const recipes = getSavedRecipes(user.phone_number);
   if (recipes.length > 0) {
@@ -305,22 +238,17 @@ Want to swap anything?"`);
 export function buildGroceryListPrompt(
   user: User,
   meals: Array<{ recipe_name: string; ingredients: Array<{ name: string; qty: string; unit: string }> }>,
-  inventory: Array<{ item_name: string; quantity: string | null }>
 ): string {
   return `${PERSONA}
 
 ## Task: Generate a Grocery List
 
-Based on the following meals and current inventory, generate a grocery list of items the user needs to buy.
+Based on the following meals, generate a grocery list of items the user needs to buy.
 
 ### Planned Meals
 ${meals.map(m => `- ${m.recipe_name}: ${m.ingredients.map(i => `${i.qty} ${i.unit} ${i.name}`).join(', ')}`).join('\n')}
 
-### Current Inventory
-${inventory.map(i => `- ${i.item_name}${i.quantity ? ` (${i.quantity})` : ''}`).join('\n') || 'Empty'}
-
 ### Instructions
-- Subtract what the user already has from what they need
 - Group items by store section: Produce, Protein, Dairy, Pantry, Spices, Other
 - Combine duplicate ingredients across meals (add quantities)
 

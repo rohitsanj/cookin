@@ -27,17 +27,6 @@ interface ScheduleEvent {
 function buildSchedule(prefs: UserPreferences): Map<string, ScheduleEvent[]> {
   const schedule = new Map<string, ScheduleEvent[]>();
 
-  if (prefs.grocery_day) {
-    const events = schedule.get(prefs.grocery_day) || [];
-    events.push({
-      time: prefs.grocery_time || '09:00',
-      label: 'Inventory Check',
-      description: 'Review what\'s in your kitchen before planning the week',
-      type: 'grocery',
-    });
-    schedule.set(prefs.grocery_day, events);
-  }
-
   for (const day of prefs.cook_days) {
     const events = schedule.get(day) || [];
     events.push({

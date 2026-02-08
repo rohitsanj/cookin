@@ -2,7 +2,6 @@ import { getOrCreateUser } from '../services/user.js';
 import { logMessage } from '../services/message-throttle.js';
 import { ConversationState, isOnboardingState } from '../conversation/state.js';
 import { handleOnboarding } from '../conversation/flows/onboarding.js';
-import { handleInventoryConfirmation } from '../conversation/flows/inventory-confirmation.js';
 import { handleMealPlanNegotiation } from '../conversation/flows/meal-plan-negotiation.js';
 import { handleCookFeedback } from '../conversation/flows/cook-reminder.js';
 import { handleGroceryConfirmation } from '../conversation/flows/grocery-confirmation.js';
@@ -25,9 +24,6 @@ export async function handleWebChat(userIdentifier: string, text: string): Promi
       responseText = await handleOnboarding(user, text);
     } else {
       switch (user.conversation_state) {
-        case ConversationState.AWAITING_INVENTORY_CONFIRM:
-          responseText = await handleInventoryConfirmation(user, text);
-          break;
         case ConversationState.AWAITING_MEAL_PLAN_APPROVAL:
           responseText = await handleMealPlanNegotiation(user, text);
           break;

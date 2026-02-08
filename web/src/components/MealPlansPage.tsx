@@ -194,11 +194,7 @@ function MealCard({
                 {meal.ingredients.map((ing, i) => (
                   <span
                     key={i}
-                    className={`text-xs px-2 py-1 rounded-md ${
-                      ing.in_inventory
-                        ? 'bg-success/10 text-success'
-                        : 'bg-card-hover text-text'
-                    }`}
+                    className="text-xs px-2 py-1 rounded-md bg-card-hover text-text"
                   >
                     {ing.qty} {ing.unit} {ing.name}
                   </span>
