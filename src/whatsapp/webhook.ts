@@ -10,6 +10,10 @@ webhookRouter.use(express.urlencoded({ extended: false }));
 
 const processedMessages = new Set<string>();
 
+webhookRouter.get('/', (_req, res) => {
+  res.sendFile('index.html', { root: 'static' });
+});
+
 webhookRouter.post('/webhook', (req, res) => {
   const body = req.body as TwilioWebhookBody;
   const message = extractMessage(body);
