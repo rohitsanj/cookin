@@ -1,35 +1,44 @@
-# --- Stage 1: Build ---
+# --- Stage 1: Build Backend ---
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Copy package.json and lock files, then install all dependencies (including devDependencies)
 COPY package*.json ./
 RUN npm install
 
-# Copy all source code
 COPY . .
-COPY src/db/migrations/ ./dist/db/migrations/
+RUN npm run build
+# Copy SQL migrations into dist (tsc doesn't copy non-TS files)
+RUN cp -r src/db/migrations dist/db/migrations
 
-# Compile TypeScript files into the 'dist' directory
-RUN npm run build 
+# --- Stage 2: Build Frontend ---
+FROM node:20-alpine AS web-build
+WORKDIR /app
 
-# --- Stage 2: Production Run ---
+# Need root .env for vite.config.ts dotenv loading
+COPY .env* ./
+COPY web/ ./web/
+
+WORKDIR /app/web
+RUN npm install
+RUN npm run build
+
+# --- Stage 3: Production ---
 FROM node:20-alpine AS production
 WORKDIR /app
 
-# Only install production dependencies
+# Install production deps (includes native better-sqlite3)
 COPY package*.json ./
-ENV NODE_ENV=production
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
-# Copy only the compiled JS files from the 'build' stage to the new 'production' stage
+# Copy compiled backend
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/static ./static
-ENV DATABASE_PATH=/data/cookin.db
 
+# Copy static assets and frontend
+COPY --from=build /app/static ./static
+COPY --from=web-build /app/web/dist ./web-dist
+
+ENV DATABASE_PATH=/data/cookin.db
 RUN mkdir -p /data
 
 EXPOSE 3000
-
-# Command to run the compiled JavaScript application
-CMD ["node", "dist/index.js"] 
+CMD ["node", "dist/index.js"]

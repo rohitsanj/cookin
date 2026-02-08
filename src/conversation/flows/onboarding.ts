@@ -5,7 +5,7 @@ import { ConversationState } from '../state.js';
 import { getLlm } from '../../llm/adapter.js';
 import { buildSystemPrompt } from '../prompt-builder.js';
 import { parseResponse } from '../response-parser.js';
-import { scheduleUserJobs } from '../../scheduler/index.js';
+import { generateAndSendMealPlan } from './meal-plan-negotiation.js';
 
 async function llmParse(user: User, state: ConversationState, text: string): Promise<Record<string, unknown>> {
   const systemPrompt = buildSystemPrompt(user, state, {});
@@ -21,9 +21,9 @@ export async function handleOnboarding(user: User, text: string): Promise<string
   switch (user.conversation_state) {
     case ConversationState.NEW: {
       setConversationState(user.phone_number, ConversationState.ONBOARDING_CUISINE);
-      return `Hey there! Welcome to Cookin 🍳
+      return `Hey there! Welcome to Cookin' 🍳
 
-I'll help you build a cooking habit by planning meals, sending you grocery lists, and reminding you when it's time to cook.
+I'll help you build a cooking habit by planning meals and grocery lists.
 
 Let's set you up! What cuisines do you enjoy? (e.g., Indian, Italian, Mexican, Japanese — list as many as you like)`;
     }
@@ -81,26 +81,15 @@ Which days of the week do you want to cook? (e.g., Mon, Wed, Fri, Sun)`;
       setConversationState(user.phone_number, ConversationState.ONBOARDING_GROCERY_DAY);
       return `You'll cook on ${days.join(', ')}. Nice!
 
-Which day do you want me to send your grocery list? (Usually a day or two before your first cook day)`;
+Which day do you want your grocery list? (Usually a day or two before your first cook day)`;
     }
 
     case ConversationState.ONBOARDING_GROCERY_DAY: {
       const data = await llmParse(user, ConversationState.ONBOARDING_GROCERY_DAY, text);
       const day = (data.grocery_day as string) || 'Saturday';
       updateUser(user.phone_number, { grocery_day: day });
-      setConversationState(user.phone_number, ConversationState.ONBOARDING_REMINDER_TIME);
-      return `Grocery list coming every ${day}.
-
-What time should I remind you to start cooking? (e.g., 5:30 PM, 6 PM)`;
-    }
-
-    case ConversationState.ONBOARDING_REMINDER_TIME: {
-      const data = await llmParse(user, ConversationState.ONBOARDING_REMINDER_TIME, text);
-      const time = (data.cook_reminder_time as string) || '17:30';
-      const timezone = (data.timezone as string) || 'America/Los_Angeles';
-      updateUser(user.phone_number, { cook_reminder_time: time, timezone });
       setConversationState(user.phone_number, ConversationState.ONBOARDING_INVENTORY);
-      return `Cook reminders at ${time}. Perfect.
+      return `Grocery list coming every ${day}.
 
 Do you have any staples at home right now? (e.g., rice, pasta, olive oil, salt, basic spices — list whatever you have, or say "nothing")`;
     }
@@ -111,23 +100,15 @@ Do you have any staples at home right now? (e.g., rice, pasta, olive oil, salt, 
       if (items.length > 0) {
         addItems(user.phone_number, items.map(i => ({ ...i, is_staple: true })));
       }
-      setConversationState(user.phone_number, ConversationState.ONBOARDING_MAX_MESSAGES);
+      setConversationState(user.phone_number, ConversationState.ONBOARDING_CONFIRM);
+
+      const updated = getOrCreateUser(user.phone_number);
       const itemNote = items.length > 0
         ? `Got it — ${items.length} staples logged.`
         : `Starting from scratch — no problem!`;
       return `${itemNote}
 
-Last question: how many messages from me per day is okay? (e.g., 2-3, or say "just the essentials" for minimal messages)`;
-    }
-
-    case ConversationState.ONBOARDING_MAX_MESSAGES: {
-      const data = await llmParse(user, ConversationState.ONBOARDING_MAX_MESSAGES, text);
-      const maxMessages = (data.max_messages_per_day as number) || 3;
-      updateUser(user.phone_number, { max_messages_per_day: maxMessages });
-      setConversationState(user.phone_number, ConversationState.ONBOARDING_CONFIRM);
-
-      const updated = getOrCreateUser(user.phone_number);
-      return `Here's your profile:
+Here's your profile:
 
 Cuisines: ${updated.cuisine_preferences.join(', ')}
 Restrictions: ${updated.dietary_restrictions.join(', ') || 'None'}
@@ -135,8 +116,6 @@ Household: ${updated.household_size}
 Skill: ${updated.skill_level}
 Cook days: ${updated.cook_days.join(', ')}
 Grocery day: ${updated.grocery_day}
-Reminder time: ${updated.cook_reminder_time}
-Max messages/day: ${updated.max_messages_per_day}
 
 Does everything look right? (say "yes" to confirm, or tell me what to change)`;
     }
@@ -148,22 +127,22 @@ Does everything look right? (say "yes" to confirm, or tell me what to change)`;
       );
 
       if (isConfirm) {
-        setConversationState(user.phone_number, ConversationState.IDLE);
+        // Generate meal plan immediately
         const updated = getOrCreateUser(user.phone_number);
-        scheduleUserJobs(updated);
-        return `You're all set!
+        try {
+          const planReply = await generateAndSendMealPlan(updated);
+          return `You're all set! Let me put together your first meal plan...\n\n${planReply}`;
+        } catch (err) {
+          console.error('Failed to generate initial meal plan:', err);
+          setConversationState(user.phone_number, ConversationState.IDLE);
+          return `You're all set! I had trouble generating a meal plan right now, but you can ask me anytime to create one.
 
-I'll send your inventory check and meal plan on ${updated.grocery_day}, and cooking reminders on ${updated.cook_days.join(', ')} at ${updated.cook_reminder_time}.
-
-You can message me anytime to:
+You can also:
 - Update what's in your kitchen
-- Change your preferences or schedule
-- Ask for recipe ideas
-- View your meal plan
-
-Talk soon!`;
+- Change your preferences
+- Ask for recipe ideas`;
+        }
       } else {
-        // Use LLM to figure out what they want to change
         const data = await llmParse(user, ConversationState.ONBOARDING_CONFIRM, text);
         const field = data.field as string | undefined;
         const value = data.value;
@@ -179,8 +158,6 @@ Household: ${updated.household_size}
 Skill: ${updated.skill_level}
 Cook days: ${updated.cook_days.join(', ')}
 Grocery day: ${updated.grocery_day}
-Reminder time: ${updated.cook_reminder_time}
-Max messages/day: ${updated.max_messages_per_day}
 
 Does everything look right now?`;
         }

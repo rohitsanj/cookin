@@ -1,4 +1,4 @@
-import type { LlmAdapter, ChatMessage, LlmResponse, LlmConfig } from '../types.js';
+import type { LlmAdapter, ChatMessage, LlmResponse, LlmConfig, ChatOptions } from '../types.js';
 
 export class OpenAiAdapter implements LlmAdapter {
   private baseUrl: string;
@@ -11,19 +11,49 @@ export class OpenAiAdapter implements LlmAdapter {
     this.model = config.model;
   }
 
-  async chat(messages: ChatMessage[]): Promise<LlmResponse> {
+  async chat(messages: ChatMessage[], options?: ChatOptions): Promise<LlmResponse> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      messages: messages.map(m => {
+        if (m.role === 'assistant' && m.tool_calls) {
+          return {
+            role: 'assistant',
+            content: m.content || null,
+            tool_calls: m.tool_calls.map(tc => ({
+              id: tc.id,
+              type: 'function',
+              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+            })),
+          };
+        }
+        if (m.role === 'tool') {
+          return {
+            role: 'tool',
+            tool_call_id: m.tool_call_id,
+            content: m.content,
+          };
+        }
+        return { role: m.role, content: m.content };
+      }),
+      temperature: 0.7,
+    };
+
+    if (options?.tools && options.tools.length > 0) {
+      body.tools = options.tools.map(t => ({
+        type: 'function',
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+    } else {
+      body.response_format = { type: 'json_object' };
+    }
+
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        temperature: 0.7,
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -32,12 +62,29 @@ export class OpenAiAdapter implements LlmAdapter {
     }
 
     const data = await response.json() as {
-      choices: Array<{ message: { content: string } }>;
+      choices: Array<{
+        message: {
+          content: string | null;
+          tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>;
       usage?: { prompt_tokens: number; completion_tokens: number };
     };
 
+    const msg = data.choices[0].message;
+    const toolCalls = msg.tool_calls?.map(tc => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+    }));
+
     return {
-      content: data.choices[0].message.content,
+      content: msg.content || '',
+      tool_calls: toolCalls,
       usage: data.usage ? {
         promptTokens: data.usage.prompt_tokens,
         completionTokens: data.usage.completion_tokens,

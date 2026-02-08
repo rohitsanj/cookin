@@ -3,6 +3,7 @@ import { getInventory } from '../services/inventory.js';
 import { getSavedRecipes } from '../services/recipe.js';
 import { getCurrentPlan } from '../services/meal-plan.js';
 import { ConversationState } from './state.js';
+import { DB_SCHEMA_CONTEXT } from '../tools/schema-context.js';
 
 const PERSONA = `You are Cookin, a friendly and practical cooking assistant on WhatsApp. You help the user build a consistent cooking habit through meal planning, grocery lists, and cooking reminders.
 
@@ -57,23 +58,11 @@ Parse into a single day name.
 Intent: "onboarding_response"
 Data: { "grocery_day": "Saturday" }`;
 
-    case ConversationState.ONBOARDING_REMINDER_TIME:
-      return `The user is answering: "What time should I remind you to start cooking?"
-Parse into 24h format HH:MM. Also try to infer their timezone from any context clues, otherwise default to "America/Los_Angeles".
-Intent: "onboarding_response"
-Data: { "cook_reminder_time": "17:30", "timezone": "America/Los_Angeles" }`;
-
     case ConversationState.ONBOARDING_INVENTORY:
       return `The user is listing staples they have at home.
 Parse into a list of items with optional category. Mark all as staples.
 Intent: "onboarding_response"
 Data: { "items": [{ "item_name": "rice", "category": "pantry" }, { "item_name": "olive oil", "category": "pantry" }, ...] }`;
-
-    case ConversationState.ONBOARDING_MAX_MESSAGES:
-      return `The user is answering: "How many messages from me per day is okay?"
-Parse into a number (default 3 if unclear).
-Intent: "onboarding_response"
-Data: { "max_messages_per_day": 3 }`;
 
     case ConversationState.ONBOARDING_CONFIRM:
       return `The user was just shown their profile summary and asked to confirm.
@@ -99,12 +88,12 @@ If "none": keep_indices should be empty array.`;
 
     case ConversationState.AWAITING_MEAL_PLAN_APPROVAL: {
       const pendingPlan = stateContext.pending_plan as Record<string, unknown> | undefined;
-      return `The user was sent a proposed meal plan and asked if they want to swap anything.
+      return `The user was sent a proposed meal plan (breakfast/lunch/dinner per cook day) and asked if they want to swap anything.
 Pending plan: ${JSON.stringify(pendingPlan || {})}
 
 Possible intents:
 - "accept_plan" — they approve (e.g. "looks good", "yes", "perfect")
-- "swap_meal" — they want to swap a specific meal. Data: { "day": "Monday", "reason": "something quicker" }
+- "swap_meal" — they want to swap meals. Data: { "days": ["Monday", "Friday"], "meal_type": "dinner" (optional — omit to swap all meals for that day), "reason": "something quicker" }. Use "days" array even for a single day.
 - "reject_plan" — they want entirely new options (e.g. "give me new options", "try again")
 - "skip_day" — they want to skip a day this week. Data: { "day": "Friday" }`;
     }
@@ -136,33 +125,17 @@ Data: {
 }`;
 
     case ConversationState.IDLE:
-      return `The user is sending a free-form message. Classify their intent:
+      return `The user is sending a free-form message. You have tools available to take actions on their behalf.
 
-Possible intents:
-- "update_inventory" — they're telling you what they bought or ran out of.
-  Data: { "add": [{ "item_name": "eggs", "quantity": "12", "category": "protein" }], "remove": ["milk"] }
-- "change_preferences" — updating cuisine preferences, dietary restrictions, etc.
-  Data: { "field": "cuisine_preferences", "value": ["Indian", "Japanese"] }
-- "adjust_schedule" — changing cook days, grocery day, reminder time, etc.
-  Data: { "field": "cook_days", "value": ["Monday", "Thursday"] }
-- "adjust_frequency" — changing message frequency.
-  Data: { "max_messages_per_day": 5 }
-- "ask_recipe" — asking what they can make or for a specific recipe.
-  Data: { "constraints": "quick", "cuisine": "Italian" }
-- "log_meal" — they cooked something (not from the plan).
-  Data: { "recipe_name": "pasta", "ingredients_used": ["pasta", "garlic", "olive oil"] }
-- "view_plan" — asking about this week's meal plan.
-- "rate_recipe" — rating a recipe they cooked.
-  Data: { "recipe_name": "...", "rating": 4, "notes": "..." }
-- "save_recipe" — explicitly asking to save a recipe.
-  Data: { "recipe_name": "..." }
-- "modify_recipe" — changing a saved recipe.
-  Data: { "recipe_name": "...", "modification": "use yogurt instead of cream" }
-- "browse_recipes" — viewing their saved recipes.
-  Data: { "filter": "Indian" }
-- "general_question" — general cooking questions.
-- "greeting" — just saying hi.
-- "other" — anything else.`;
+Use the appropriate tool when the user wants to:
+- View or modify their kitchen inventory
+- View, rate, save, or modify recipes
+- View their current meal plan
+- Update their cooking preferences or schedule
+- Log a meal they cooked
+
+For general cooking questions, greetings, or casual conversation, respond directly without using tools.
+Always respond in a friendly, concise way suitable for chat.`;
 
     default:
       return `Interpret the user's message and respond helpfully. Intent: "other"`;
@@ -225,7 +198,13 @@ Timezone: ${user.timezone}`);
     }
   }
 
-  parts.push(RESPONSE_FORMAT);
+  if (state === ConversationState.IDLE) {
+    // IDLE state uses tool calling, not JSON response format
+    parts.push(DB_SCHEMA_CONTEXT);
+  } else {
+    // Other states use structured JSON responses
+    parts.push(RESPONSE_FORMAT);
+  }
 
   return parts.join('\n\n---\n\n');
 }
@@ -236,6 +215,7 @@ export function buildMealPlanPrompt(user: User): string {
   parts.push(`## Task: Generate a Weekly Meal Plan
 
 Generate a meal plan for the following cook days: ${user.cook_days.join(', ')}
+For each cook day, generate THREE meals: breakfast, lunch, and dinner.
 
 Requirements:
 - Cuisine preferences: ${user.cuisine_preferences.join(', ') || 'any'}
@@ -243,7 +223,10 @@ Requirements:
 - Household size: ${user.household_size} servings
 - Skill level: ${user.skill_level}
 - No repeats within the week
-- Include variety across cuisines
+- Include variety across cuisines and meal types
+- Breakfasts should be quick (15-30 min)
+- Lunches should be moderate (20-40 min)
+- Dinners can be more involved (30-60 min)
 - Each meal should be achievable for a ${user.skill_level} cook`);
 
   const inventory = getInventory(user.phone_number);
@@ -276,20 +259,45 @@ Respond with ONLY a valid JSON object:
     "meals": [
       {
         "day": "Monday",
-        "recipe_name": "Chicken tikka masala",
-        "recipe_steps": "1. Marinate chicken...\\n2. Sear chicken...\\n3. Add sauce...\\n4. Serve over rice",
+        "meal_type": "breakfast",
+        "recipe_name": "Avocado toast with eggs",
+        "recipe_steps": "1. Toast bread...\\n2. Mash avocado...\\n3. Fry eggs...",
         "ingredients": [
-          { "name": "chicken thigh", "qty": "500", "unit": "g" },
-          { "name": "tikka paste", "qty": "2", "unit": "tbsp" }
+          { "name": "bread", "qty": "2", "unit": "slices" },
+          { "name": "avocado", "qty": "1", "unit": "" }
         ],
-        "cook_time_min": 45
+        "cook_time_min": 15
+      },
+      {
+        "day": "Monday",
+        "meal_type": "lunch",
+        "recipe_name": "...",
+        ...
+      },
+      {
+        "day": "Monday",
+        "meal_type": "dinner",
+        "recipe_name": "...",
+        ...
       }
     ]
   }
 }
 
-The "reply" should be a nicely formatted WhatsApp message like:
-"Here's your plan for this week:\\n\\nMon — Chicken tikka masala (45 min)\\nWed — Pasta aglio e olio (20 min)\\n...\\n\\nWant to swap anything?"`);
+Each cook day MUST have exactly 3 meals: breakfast, lunch, dinner.
+
+The "reply" should be a nicely formatted message grouped by day like:
+"Here's your plan for this week:
+
+Monday
+  🌅 Breakfast — Avocado toast (15 min)
+  ☀️ Lunch — Caesar salad (20 min)
+  🌙 Dinner — Chicken tikka masala (45 min)
+
+Wednesday
+  🌅 Breakfast — ...
+
+Want to swap anything?"`);
 
   return parts.join('\n\n---\n\n');
 }

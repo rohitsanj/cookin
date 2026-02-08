@@ -7,6 +7,15 @@ import { buildSystemPrompt, buildMealPlanPrompt, buildGroceryListPrompt } from '
 import { parseResponse } from '../response-parser.js';
 import * as mealPlanService from '../../services/meal-plan.js';
 
+interface MealData {
+  day: string;
+  meal_type?: 'breakfast' | 'lunch' | 'dinner';
+  recipe_name: string;
+  recipe_steps: string;
+  ingredients: Array<{ name: string; qty: string; unit: string }>;
+  cook_time_min: number;
+}
+
 export async function generateAndSendMealPlan(user: User): Promise<string> {
   const systemPrompt = buildMealPlanPrompt(user);
   const response = await getLlm().chat([
@@ -15,13 +24,7 @@ export async function generateAndSendMealPlan(user: User): Promise<string> {
   ]);
 
   const parsed = parseResponse(response.content);
-  const meals = (parsed.data?.meals as Array<{
-    day: string;
-    recipe_name: string;
-    recipe_steps: string;
-    ingredients: Array<{ name: string; qty: string; unit: string }>;
-    cook_time_min: number;
-  }>) || [];
+  const meals = (parsed.data?.meals as MealData[]) || [];
 
   if (meals.length === 0) {
     return parsed.reply || "I had trouble generating a meal plan. Could you try asking again?";
@@ -41,6 +44,7 @@ export async function generateAndSendMealPlan(user: User): Promise<string> {
   for (const meal of meals) {
     mealPlanService.addPlannedMeal(planId, {
       day: meal.day,
+      meal_type: meal.meal_type || 'dinner',
       recipe_name: meal.recipe_name,
       recipe_steps: meal.recipe_steps,
       ingredients: meal.ingredients,
@@ -51,10 +55,45 @@ export async function generateAndSendMealPlan(user: User): Promise<string> {
   // Store pending plan in state context for negotiation
   setConversationState(user.phone_number, ConversationState.AWAITING_MEAL_PLAN_APPROVAL, {
     plan_id: planId,
-    pending_plan: { meals: meals.map(m => ({ day: m.day, recipe_name: m.recipe_name, cook_time_min: m.cook_time_min })) },
+    pending_plan: {
+      meals: meals.map(m => ({
+        day: m.day,
+        meal_type: m.meal_type || 'dinner',
+        recipe_name: m.recipe_name,
+        cook_time_min: m.cook_time_min,
+      })),
+    },
   });
 
   return parsed.reply;
+}
+
+function formatPlanText(plan: mealPlanService.MealPlan): string {
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const typeOrder = { breakfast: 0, lunch: 1, dinner: 2 };
+  const typeIcon: Record<string, string> = { breakfast: '🌅', lunch: '☀️', dinner: '🌙' };
+
+  const byDay = new Map<string, mealPlanService.PlannedMeal[]>();
+  for (const m of plan.meals) {
+    const list = byDay.get(m.day) || [];
+    list.push(m);
+    byDay.set(m.day, list);
+  }
+
+  const lines: string[] = [];
+  for (const day of dayOrder) {
+    const meals = byDay.get(day);
+    if (!meals) continue;
+    lines.push(day);
+    meals
+      .sort((a, b) => (typeOrder[a.meal_type] ?? 3) - (typeOrder[b.meal_type] ?? 3))
+      .forEach(m => {
+        const icon = typeIcon[m.meal_type] || '🍽️';
+        lines.push(`  ${icon} ${m.meal_type.charAt(0).toUpperCase() + m.meal_type.slice(1)} — ${m.recipe_name} (${m.cook_time_min} min)`);
+      });
+    lines.push('');
+  }
+  return lines.join('\n').trim();
 }
 
 export async function handleMealPlanNegotiation(user: User, text: string): Promise<string> {
@@ -70,7 +109,6 @@ export async function handleMealPlanNegotiation(user: User, text: string): Promi
     case 'accept_plan': {
       mealPlanService.confirmPlan(planId);
 
-      // Generate grocery list
       const plan = mealPlanService.getCurrentPlan(user.phone_number);
       if (plan) {
         const groceryReply = await generateGroceryList(user, plan);
@@ -82,64 +120,90 @@ export async function handleMealPlanNegotiation(user: User, text: string): Promi
     }
 
     case 'swap_meal': {
-      const day = parsed.data?.day as string;
-      const reason = parsed.data?.reason as string;
+      const days = parsed.data?.days as string[] | undefined;
+      const day = parsed.data?.day as string | undefined;
+      const mealType = parsed.data?.meal_type as string | undefined;
+      const reason = parsed.data?.reason as string || '';
 
-      if (!day) {
+      // Support both single day and multiple days
+      const daysToSwap = days || (day ? [day] : []);
+
+      if (daysToSwap.length === 0) {
         return parsed.reply || "Which day's meal do you want to swap?";
       }
 
-      // Remove the old meal for that day
       const plan = mealPlanService.getCurrentPlan(user.phone_number);
-      if (plan) {
-        const mealToRemove = plan.meals.find(m => m.day === day);
-        if (mealToRemove) {
-          mealPlanService.removePlannedMeal(mealToRemove.id);
-        }
-      }
 
-      // Ask LLM for a replacement
-      const swapPrompt = buildMealPlanPrompt(user);
-      const swapResponse = await getLlm().chat([
-        { role: 'system', content: swapPrompt },
-        { role: 'user', content: `Generate a single replacement meal for ${day}. ${reason ? `Preference: ${reason}` : ''}. Different from: ${plan?.meals.filter(m => m.day !== day).map(m => m.recipe_name).join(', ')}` },
-      ]);
-      const swapParsed = parseResponse(swapResponse.content);
-      const newMeals = (swapParsed.data?.meals as Array<{
-        day: string;
-        recipe_name: string;
-        recipe_steps: string;
-        ingredients: Array<{ name: string; qty: string; unit: string }>;
-        cook_time_min: number;
-      }>) || [];
+      for (const swapDay of daysToSwap) {
+        if (!plan) break;
 
-      if (newMeals.length > 0) {
-        mealPlanService.addPlannedMeal(planId, {
-          day,
-          recipe_name: newMeals[0].recipe_name,
-          recipe_steps: newMeals[0].recipe_steps,
-          ingredients: newMeals[0].ingredients,
-          cook_time_min: newMeals[0].cook_time_min,
+        // Find meals to remove for this day
+        const mealsToRemove = plan.meals.filter(m => {
+          if (m.day !== swapDay) return false;
+          if (mealType && m.meal_type !== mealType) return false;
+          return true;
         });
+
+        for (const meal of mealsToRemove) {
+          mealPlanService.removePlannedMeal(meal.id);
+        }
+
+        // Determine what to regenerate
+        const typesToRegenerate = mealType ? [mealType] : ['breakfast', 'lunch', 'dinner'];
+        const existingNames = plan.meals
+          .filter(m => m.day !== swapDay)
+          .map(m => m.recipe_name);
+
+        // Ask LLM for replacements
+        const swapPrompt = buildMealPlanPrompt(user);
+        try {
+          const swapResponse = await getLlm().chat([
+            { role: 'system', content: swapPrompt },
+            {
+              role: 'user',
+              content: `Generate replacement meals for ${swapDay}: ${typesToRegenerate.join(', ')}. ${reason ? `Preference: ${reason}.` : ''} Must be different from: ${existingNames.join(', ')}`,
+            },
+          ]);
+          const swapParsed = parseResponse(swapResponse.content);
+          const newMeals = (swapParsed.data?.meals as MealData[]) || [];
+
+          for (const newMeal of newMeals) {
+            mealPlanService.addPlannedMeal(planId, {
+              day: swapDay,
+              meal_type: newMeal.meal_type || 'dinner',
+              recipe_name: newMeal.recipe_name,
+              recipe_steps: newMeal.recipe_steps,
+              ingredients: newMeal.ingredients,
+              cook_time_min: newMeal.cook_time_min,
+            });
+          }
+        } catch (err) {
+          console.error(`Error generating swap for ${swapDay}:`, err);
+        }
       }
 
       // Rebuild the plan view
       const updatedPlan = mealPlanService.getCurrentPlan(user.phone_number);
-      const planText = updatedPlan?.meals
-        .map(m => `${m.day} — ${m.recipe_name} (${m.cook_time_min} min)`)
-        .join('\n') || '';
+      const planText = updatedPlan ? formatPlanText(updatedPlan) : '';
 
       setConversationState(user.phone_number, ConversationState.AWAITING_MEAL_PLAN_APPROVAL, {
         plan_id: planId,
-        pending_plan: { meals: updatedPlan?.meals.map(m => ({ day: m.day, recipe_name: m.recipe_name, cook_time_min: m.cook_time_min })) },
+        pending_plan: {
+          meals: updatedPlan?.meals.map(m => ({
+            day: m.day,
+            meal_type: m.meal_type,
+            recipe_name: m.recipe_name,
+            cook_time_min: m.cook_time_min,
+          })),
+        },
       });
 
-      return `Swapped ${day}! Here's the updated plan:\n\n${planText}\n\nAnything else to change?`;
+      return `Here's the updated plan:\n\n${planText}\n\nWant to swap anything else, or does this look good?`;
     }
 
     case 'reject_plan': {
-      // Clear all meals and regenerate
       mealPlanService.clearPlanMeals(planId);
+      // Delete the plan and regenerate from scratch
       const newReply = await generateAndSendMealPlan(user);
       return newReply;
     }
@@ -148,9 +212,9 @@ export async function handleMealPlanNegotiation(user: User, text: string): Promi
       const day = parsed.data?.day as string;
       if (day) {
         const plan = mealPlanService.getCurrentPlan(user.phone_number);
-        const mealToSkip = plan?.meals.find(m => m.day === day);
-        if (mealToSkip) {
-          mealPlanService.updateMealStatus(mealToSkip.id, 'skipped');
+        const mealsToSkip = plan?.meals.filter(m => m.day === day) || [];
+        for (const meal of mealsToSkip) {
+          mealPlanService.updateMealStatus(meal.id, 'skipped');
         }
       }
       return parsed.reply || `Skipping ${parsed.data?.day || 'that day'} this week.`;
@@ -182,7 +246,6 @@ async function generateGroceryList(user: User, plan: mealPlanService.MealPlan): 
   ]);
   const parsed = parseResponse(response.content);
 
-  // Save grocery list to DB
   const items = (parsed.data?.items as mealPlanService.GroceryList['items']) || [];
   mealPlanService.createGroceryList(plan.id, items);
 

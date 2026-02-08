@@ -14,6 +14,7 @@ export interface SavedRecipe {
   notes: string | null;
   times_cooked: number;
   last_cooked: string | null;
+  is_favorite: boolean;
   created_at: string;
 }
 
@@ -30,11 +31,12 @@ interface RecipeRow {
   notes: string | null;
   times_cooked: number;
   last_cooked: string | null;
+  is_favorite: number;
   created_at: string;
 }
 
 function deserialize(row: RecipeRow): SavedRecipe {
-  return { ...row, ingredients: JSON.parse(row.ingredients) };
+  return { ...row, ingredients: JSON.parse(row.ingredients), is_favorite: row.is_favorite === 1 };
 }
 
 export function getSavedRecipes(userPhone: string): SavedRecipe[] {
@@ -111,4 +113,12 @@ export function incrementTimesCooked(id: string): void {
   getDb().prepare(
     "UPDATE saved_recipe SET times_cooked = times_cooked + 1, last_cooked = date('now') WHERE id = ?"
   ).run(id);
+}
+
+export function toggleRecipeFavorite(id: string): boolean {
+  const row = getDb().prepare('SELECT is_favorite FROM saved_recipe WHERE id = ?').get(id) as { is_favorite: number } | undefined;
+  if (!row) throw new Error('Recipe not found');
+  const newValue = row.is_favorite === 1 ? 0 : 1;
+  getDb().prepare('UPDATE saved_recipe SET is_favorite = ? WHERE id = ?').run(newValue, id);
+  return newValue === 1;
 }

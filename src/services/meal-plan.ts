@@ -5,12 +5,15 @@ export interface PlannedMeal {
   id: string;
   meal_plan_id: string;
   day: string;
+  meal_type: 'breakfast' | 'lunch' | 'dinner';
   recipe_name: string;
   recipe_steps: string | null;
   ingredients: Array<{ name: string; qty: string; unit: string; in_inventory?: boolean }>;
   cook_time_min: number | null;
   status: 'pending' | 'cooked' | 'skipped';
   user_rating: number | null;
+  user_comment: string | null;
+  is_favorite: boolean;
   created_at: string;
 }
 
@@ -44,12 +47,15 @@ interface PlannedMealRow {
   id: string;
   meal_plan_id: string;
   day: string;
+  meal_type: string;
   recipe_name: string;
   recipe_steps: string | null;
   ingredients: string;
   cook_time_min: number | null;
   status: string;
   user_rating: number | null;
+  user_comment: string | null;
+  is_favorite: number;
   created_at: string;
 }
 
@@ -65,8 +71,10 @@ interface GroceryListRow {
 function deserializeMeal(row: PlannedMealRow): PlannedMeal {
   return {
     ...row,
+    meal_type: (row.meal_type || 'dinner') as PlannedMeal['meal_type'],
     ingredients: JSON.parse(row.ingredients),
     status: row.status as PlannedMeal['status'],
+    is_favorite: row.is_favorite === 1,
   };
 }
 
@@ -75,6 +83,14 @@ export function getCurrentPlan(userPhone: string): MealPlan | null {
     "SELECT * FROM meal_plan WHERE user_phone = ? AND status IN ('draft', 'confirmed') ORDER BY week_start DESC LIMIT 1"
   ).get(userPhone) as MealPlanRow | undefined;
   if (!row) return null;
+
+  // Auto-complete stale plans (older than 7 days)
+  const weekStart = new Date(row.week_start);
+  const daysSince = (Date.now() - weekStart.getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSince >= 7) {
+    getDb().prepare("UPDATE meal_plan SET status = 'completed' WHERE id = ?").run(row.id);
+    return null;
+  }
 
   const mealRows = getDb().prepare(
     'SELECT * FROM planned_meal WHERE meal_plan_id = ? ORDER BY day'
@@ -97,6 +113,7 @@ export function createMealPlan(userPhone: string, weekStart: string): string {
 
 export function addPlannedMeal(planId: string, meal: {
   day: string;
+  meal_type?: 'breakfast' | 'lunch' | 'dinner';
   recipe_name: string;
   recipe_steps: string;
   ingredients: Array<{ name: string; qty: string; unit: string; in_inventory?: boolean }>;
@@ -104,9 +121,9 @@ export function addPlannedMeal(planId: string, meal: {
 }): string {
   const id = uuid();
   getDb().prepare(`
-    INSERT INTO planned_meal (id, meal_plan_id, day, recipe_name, recipe_steps, ingredients, cook_time_min)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, planId, meal.day, meal.recipe_name, meal.recipe_steps, JSON.stringify(meal.ingredients), meal.cook_time_min);
+    INSERT INTO planned_meal (id, meal_plan_id, day, meal_type, recipe_name, recipe_steps, ingredients, cook_time_min)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, planId, meal.day, meal.meal_type || 'dinner', meal.recipe_name, meal.recipe_steps, JSON.stringify(meal.ingredients), meal.cook_time_min);
   return id;
 }
 
@@ -155,4 +172,25 @@ export function getGroceryList(planId: string): GroceryList | null {
 
 export function fulfillGroceryList(id: string): void {
   getDb().prepare('UPDATE grocery_list SET fulfilled = 1 WHERE id = ?').run(id);
+}
+
+export function getPlannedMeal(mealId: string): PlannedMeal | null {
+  const row = getDb().prepare('SELECT * FROM planned_meal WHERE id = ?').get(mealId) as PlannedMealRow | undefined;
+  return row ? deserializeMeal(row) : null;
+}
+
+export function updateMealRating(mealId: string, rating: number): void {
+  getDb().prepare('UPDATE planned_meal SET user_rating = ? WHERE id = ?').run(rating, mealId);
+}
+
+export function updateMealComment(mealId: string, comment: string | null): void {
+  getDb().prepare('UPDATE planned_meal SET user_comment = ? WHERE id = ?').run(comment, mealId);
+}
+
+export function toggleMealFavorite(mealId: string): boolean {
+  const row = getDb().prepare('SELECT is_favorite FROM planned_meal WHERE id = ?').get(mealId) as { is_favorite: number } | undefined;
+  if (!row) throw new Error('Meal not found');
+  const newValue = row.is_favorite === 1 ? 0 : 1;
+  getDb().prepare('UPDATE planned_meal SET is_favorite = ? WHERE id = ?').run(newValue, mealId);
+  return newValue === 1;
 }

@@ -1,19 +1,23 @@
 import { getOrCreateUser } from '../services/user.js';
 import { logMessage } from '../services/message-throttle.js';
-import { sendTextMessage } from '../sender/sender.js';
-import { ConversationState, isOnboardingState } from './state.js';
-import { handleOnboarding } from './flows/onboarding.js';
-import { handleInventoryConfirmation } from './flows/inventory-confirmation.js';
-import { handleMealPlanNegotiation } from './flows/meal-plan-negotiation.js';
-import { handleCookFeedback } from './flows/cook-reminder.js';
-import { handleGroceryConfirmation } from './flows/grocery-confirmation.js';
-import { handleAdHoc } from './flows/ad-hoc.js';
+import { ConversationState, isOnboardingState } from '../conversation/state.js';
+import { handleOnboarding } from '../conversation/flows/onboarding.js';
+import { handleInventoryConfirmation } from '../conversation/flows/inventory-confirmation.js';
+import { handleMealPlanNegotiation } from '../conversation/flows/meal-plan-negotiation.js';
+import { handleCookFeedback } from '../conversation/flows/cook-reminder.js';
+import { handleGroceryConfirmation } from '../conversation/flows/grocery-confirmation.js';
+import { handleAdHoc } from '../conversation/flows/ad-hoc.js';
 
-export async function handleInbound(from: string, text: string): Promise<void> {
-  // First get or create the user
-  const user = getOrCreateUser(from);
-  // Then log the inbound message
-  logMessage(from, 'inbound', text);
+/**
+ * Handles a web chat message and returns the response text directly.
+ */
+export async function handleWebChat(userIdentifier: string, text: string): Promise<string> {
+  // Get or create user with the web-based identifier
+  const user = getOrCreateUser(userIdentifier);
+
+  // Log inbound message
+  logMessage(userIdentifier, 'inbound', text);
+
   let responseText: string;
 
   try {
@@ -40,9 +44,12 @@ export async function handleInbound(from: string, text: string): Promise<void> {
       }
     }
   } catch (err) {
-    console.error(`Error processing message from ${from}:`, err);
+    console.error(`Error processing web message from ${userIdentifier}:`, err);
     responseText = "Sorry, I had a hiccup processing that. Could you try again?";
   }
 
-  await sendTextMessage(from, responseText);
+  // Log outbound message
+  logMessage(userIdentifier, 'outbound', responseText);
+
+  return responseText;
 }

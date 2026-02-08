@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
 
+  <script src="https://accounts.google.com/gsi/client" async></script>
+
   <style>
     :root {
       --bg: #0f0f0f;
@@ -161,6 +163,18 @@
       font-size: 15px;
     }
 
+    .signin-link {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .signin-link:hover {
+      color: var(--accent);
+    }
+
     .steps {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -200,20 +214,22 @@
 </head>
 
 <body>
-  <div class="banner">🍳 Stay tuned for updates!</div>
+  <div class="banner">🍳 Try Cookin' free — sign in to get started</div>
 
   <header>
-    <div class="logo">Cookin<span>’</span></div>
+    <div class="logo">Cookin<span>'</span></div>
+    <a href="#signin" class="signin-link">Sign in</a>
   </header>
 
   <div class="hero">
     <div>
       <h1>Your personal assistant for all your cooking needs.</h1>
       <p>
-        Cookin’ lives on WhatsApp and learns how you like to eat.
+        Cookin' lives on WhatsApp and learns how you like to eat.
         Tell it your favorite cuisines, dietary restrictions, time constraints,
-        and goals — it’ll handle the planning so you can focus on cooking (or not).
+        and goals — it'll handle the planning so you can focus on cooking (or not).
       </p>
+      <div id="g_signin_button" style="margin-top: 32px;"></div>
     </div>
 
     <div class="phone-mock">
@@ -302,8 +318,36 @@
   </section>
 
   <footer>
-    <div>© 2026 Cookin’</div>
+    <div>© 2026 Cookin'</div>
     <div>Made with ❤️ for people who are tired of meal planning</div>
   </footer>
+
+  <script>
+    function handleCredentialResponse(response) {
+      fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.user) {
+          window.location.href = '/chat';
+        }
+      })
+      .catch(err => console.error('Sign-in error:', err));
+    }
+
+    window.onload = function() {
+      google.accounts.id.initialize({
+        client_id: '{{GOOGLE_CLIENT_ID}}',
+        callback: handleCredentialResponse,
+      });
+      google.accounts.id.renderButton(
+        document.getElementById('g_signin_button'),
+        { theme: 'filled_black', size: 'large', shape: 'pill', text: 'signin_with', width: 280 }
+      );
+    };
+  </script>
 </body>
 </html>
